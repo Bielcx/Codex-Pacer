@@ -93,11 +93,7 @@ async function refreshCodex() {
   const tokens30dEl = document.getElementById("tokens-30d");
 
   try {
-    const [pacing, history, costSummary] = await Promise.all([
-      invoke("get_pacing"),
-      invoke("get_history"),
-      invoke("get_cost_summary"),
-    ]);
+    const [pacing, history] = await Promise.all([invoke("get_pacing"), invoke("get_history")]);
 
     percentEl.textContent = pacing.remaining_percent.toFixed(0);
     progressFillEl.style.width = `${Math.min(Math.max(pacing.remaining_percent, 0), 100)}%`;
@@ -117,8 +113,8 @@ async function refreshCodex() {
       pacing.safety_buffer_percent
     );
 
-    tokensTodayEl.textContent = formatTokenCount(costSummary.today_tokens);
-    tokens30dEl.textContent = formatTokenCount(costSummary.last_30_days_tokens);
+    tokensTodayEl.textContent = formatTokenCount(pacing.today_tokens);
+    tokens30dEl.textContent = formatTokenCount(pacing.last_30_days_tokens);
   } catch (err) {
     percentEl.textContent = "!";
     progressFillEl.style.width = "0%";

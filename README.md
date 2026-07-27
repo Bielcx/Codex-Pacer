@@ -1,12 +1,16 @@
+<div align="center">
+
 # Codex Pacer
 
-A system tray app that tells you whether to slow down — not just how much usage is left.
+### A system tray app that tells you whether to slow down — not just how much usage is left.
 
-[![CI](https://github.com/Bielcx/Codex-Pacer/actions/workflows/ci.yml/badge.svg)](https://github.com/Bielcx/Codex-Pacer/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95-d97757)](https://buymeacoffee.com/bielcx)
+[![CI](https://img.shields.io/github/actions/workflow/status/Bielcx/Codex-Pacer/ci.yml?style=for-the-badge&label=CI)](https://github.com/Bielcx/Codex-Pacer/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/Bielcx/Codex-Pacer?style=for-the-badge&color=blue)](LICENSE)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95-d97757?style=for-the-badge)](https://buymeacoffee.com/bielcx)
 
 ![Codex Pacer: Codex tab with pacing verdict and burn-down chart, Claude tab with session and weekly rate limits](.github/screenshots/hero.png)
+
+</div>
 
 Most usage trackers just show raw numbers. Codex Pacer compares your actual usage against a straight-line target trajectory to the next reset and gives you a plain verdict: **Slow down**, **On track**, or **Room to use more**. Tracks [Codex CLI](https://github.com/openai/codex) natively; [Claude Code](https://claude.com/claude-code) rate limits on a second tab, opt-in.
 

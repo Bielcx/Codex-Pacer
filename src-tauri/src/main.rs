@@ -36,11 +36,13 @@ struct PacingResult {
     safe_burn_rate_per_hour: f32,
     recent_burn_rate_per_hour: Option<f32>,
     verdict: pacing::Verdict,
+    today_tokens: u64,
+    last_30_days_tokens: u64,
 }
 
 #[tauri::command]
 fn get_pacing(app: tauri::AppHandle) -> Result<PacingResult, String> {
-    let snapshot = codex::read_usage().map_err(|e| e.to_string())?;
+    let (snapshot, cost) = codex::read_usage_and_cost().map_err(|e| e.to_string())?;
 
     if let Err(e) = history::record_sample(&app, &snapshot) {
         eprintln!("failed to record usage sample: {e}");
@@ -72,6 +74,8 @@ fn get_pacing(app: tauri::AppHandle) -> Result<PacingResult, String> {
         safe_burn_rate_per_hour: report.safe_burn_rate_per_hour,
         recent_burn_rate_per_hour: report.recent_burn_rate_per_hour,
         verdict: report.verdict,
+        today_tokens: cost.today_tokens,
+        last_30_days_tokens: cost.last_30_days_tokens,
     })
 }
 
@@ -96,11 +100,6 @@ fn get_history(app: tauri::AppHandle) -> Result<Vec<HistoryPoint>, String> {
             remaining_percent: s.remaining_percent,
         })
         .collect())
-}
-
-#[tauri::command]
-fn get_cost_summary() -> Result<codex::CostSummary, String> {
-    codex::read_cost_summary()
 }
 
 #[derive(serde::Serialize)]
@@ -193,11 +192,23 @@ fn main() {
             get_usage,
             get_pacing,
             get_history,
-            get_cost_summary,
             get_claude_pacing,
             setup_claude_integration,
             unsetup_claude_integration
         ])
+        // Must be registered before any other plugin/setup logic. Without
+        // this, launching the app a second time (a stray double-click, an
+        // autostart entry racing a manual launch, a dev instance left
+        // running) spawns a whole second process with its own tray icon,
+        // which is why the icon would sometimes show up doubled. A second
+        // launch now just focuses the existing window instead.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                position_near_tray(app, &window);
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .setup(|app| {
             if let Err(e) =
                 history::cleanup_old_samples(app.handle(), history::DEFAULT_RETENTION_DAYS)
@@ -208,7 +219,34 @@ fn main() {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
 
-            let _tray = TrayIconBuilder::new()
+            // The popover has no title bar (see `decorations: false` in
+            // tauri.conf.json), so there's no OS-provided close button -
+            // clicking away is how you dismiss it, same as any other tray
+            // flyout (Windows volume/network popups, etc.).
+            //
+            // Only hide on a `Focused(false)` that follows a real
+            // `Focused(true)`: `show()` + `set_focus()` can race with
+            // Windows' focus-stealing prevention (especially right after a
+            // single-instance relaunch), producing a spurious blur before
+            // the window ever actually gained focus - without this guard
+            // that immediately hid the window again, right after showing it.
+            if let Some(window) = app.get_webview_window("main") {
+                let window_to_hide = window.clone();
+                let has_focus = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                window.on_window_event(move |event| match event {
+                    tauri::WindowEvent::Focused(true) => {
+                        has_focus.store(true, std::sync::atomic::Ordering::SeqCst);
+                    }
+                    tauri::WindowEvent::Focused(false)
+                        if has_focus.swap(false, std::sync::atomic::Ordering::SeqCst) =>
+                    {
+                        let _ = window_to_hide.hide();
+                    }
+                    _ => {}
+                });
+            }
+
+            let mut tray_builder = TrayIconBuilder::new()
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {
@@ -229,19 +267,55 @@ fn main() {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
                             let is_visible = window.is_visible().unwrap_or(false);
-                            let _ = if is_visible {
-                                window.hide()
+                            if is_visible {
+                                let _ = window.hide();
                             } else {
-                                window.show().and_then(|_| window.set_focus())
-                            };
+                                position_near_tray(app, &window);
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
                         }
                     }
-                })
-                .icon(app.default_window_icon().unwrap().clone())
-                .build(app)?;
+                });
+            // A missing default window icon (e.g. a broken resource embed)
+            // used to `.unwrap()` here and crash the whole app on startup.
+            // Fall back to Tauri's own tray default instead of panicking.
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+            let _tray = tray_builder.build(app)?;
 
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running Codex Pacer");
+}
+
+/// Anchors the popover just above the tray icon (Windows taskbar convention)
+/// instead of wherever the window last happened to be, so it reads as
+/// "attached to the tray" rather than a stray floating window. Falls back to
+/// leaving the window wherever it already is if we can't resolve a monitor.
+fn position_near_tray(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
+    let Some(monitor) = window.current_monitor().ok().flatten() else {
+        return;
+    };
+    let Ok(window_size) = window.outer_size() else {
+        return;
+    };
+    let Some(cursor_pos) = app.cursor_position().ok() else {
+        return;
+    };
+
+    let monitor_pos = monitor.position();
+    let monitor_size = monitor.size();
+
+    let mut x = cursor_pos.x as i32 - window_size.width as i32 / 2;
+    let mut y = monitor_pos.y + monitor_size.height as i32 - window_size.height as i32 - 48;
+
+    let min_x = monitor_pos.x;
+    let max_x = (monitor_pos.x + monitor_size.width as i32 - window_size.width as i32).max(min_x);
+    x = x.clamp(min_x, max_x);
+    y = y.max(monitor_pos.y);
+
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
 }

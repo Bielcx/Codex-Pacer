@@ -13,10 +13,11 @@
         "label": "main",
         "title": "Codex Pacer",
         "width": 340,
-        "height": 420,
+        "height": 560,
         "resizable": false,
         "visible": false,
-        "decorations": true,
+        "decorations": false,
+        "shadow": true,
         "skipTaskbar": true
       }
     ],

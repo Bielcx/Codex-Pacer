@@ -20,6 +20,16 @@
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
+/// Max time to wait for a response to a single `call()`. Without this, a
+/// `codex app-server` process that never responds (hung network call,
+/// waiting on a prompt with no TTY, etc.) would block its caller's thread
+/// forever and leak the child process - this was showing up as the app
+/// "hanging" after enough refreshes accumulated stuck processes.
+const CALL_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct AppServerClient {
     child: Child,
@@ -102,12 +112,32 @@ impl AppServerClient {
 
     /// Sends a request and blocks until the matching response arrives,
     /// skipping over any notifications or responses to other calls that
-    /// show up first on the stream.
+    /// show up first on the stream. A watchdog thread force-kills the child
+    /// process if `CALL_TIMEOUT` passes without a response, which unblocks
+    /// the read below (the closed pipe surfaces as EOF).
     pub fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
         let id = self.next_id;
         self.next_id += 1;
         self.write_line(&json!({ "method": method, "id": id, "params": params }))?;
 
+        let done = Arc::new(AtomicBool::new(false));
+        {
+            let done = Arc::clone(&done);
+            let pid = self.child.id();
+            std::thread::spawn(move || {
+                std::thread::sleep(CALL_TIMEOUT);
+                if !done.load(Ordering::SeqCst) {
+                    kill_process_by_id(pid);
+                }
+            });
+        }
+
+        let result = self.read_response(id, method);
+        done.store(true, Ordering::SeqCst);
+        result
+    }
+
+    fn read_response(&mut self, id: u64, method: &str) -> Result<Value, String> {
         loop {
             let mut line = String::new();
             let bytes_read = self
@@ -117,7 +147,9 @@ impl AppServerClient {
 
             if bytes_read == 0 {
                 return Err(format!(
-                    "app-server closed the connection before responding to `{method}`"
+                    "app-server closed the connection before responding to `{method}` \
+                     (it may have timed out after {}s)",
+                    CALL_TIMEOUT.as_secs()
                 ));
             }
 
@@ -142,6 +174,19 @@ impl AppServerClient {
             return Ok(msg.get("result").cloned().unwrap_or(Value::Null));
         }
     }
+}
+
+/// Force-kills a process by PID, used by the watchdog thread which only has
+/// the raw id (not a `&mut Child`, since that's owned by the blocked caller).
+/// Shells out to the OS kill command rather than pulling in a process-control
+/// crate for this one narrow case.
+fn kill_process_by_id(pid: u32) {
+    #[cfg(target_os = "windows")]
+    let _ = Command::new("taskkill")
+        .args(["/F", "/PID", &pid.to_string()])
+        .output();
+    #[cfg(not(target_os = "windows"))]
+    let _ = Command::new("kill").args(["-9", &pid.to_string()]).output();
 }
 
 impl Drop for AppServerClient {

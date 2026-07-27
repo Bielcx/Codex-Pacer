@@ -1,7 +1,7 @@
 use crate::app_server::AppServerClient;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[derive(Serialize)]
 pub struct UsageSnapshot {
@@ -13,6 +13,12 @@ pub struct UsageSnapshot {
     /// which the pacing calculation uses as the start of its target
     /// trajectory.
     pub window_duration_mins: i64,
+}
+
+#[derive(Serialize)]
+pub struct CostSummary {
+    pub today_tokens: u64,
+    pub last_30_days_tokens: u64,
 }
 
 /// Locates the `codex` CLI executable.
@@ -34,16 +40,38 @@ pub fn find_codex_binary() -> Option<String> {
 
 /// Reads a usage snapshot from the codex CLI app-server.
 ///
-/// Spawns `codex app-server`, performs the initialize handshake, and calls
-/// `account/rateLimits/read`. See `docs/app-server-protocol.md` for the full
-/// protocol notes.
+/// Spawns its own `codex app-server` process. Prefer `read_usage_and_cost`
+/// when both usage and cost are needed in the same refresh, to avoid paying
+/// for two separate spawns + handshakes.
 pub fn read_usage() -> Result<UsageSnapshot, String> {
     let binary = find_codex_binary()
         .ok_or_else(|| "codex CLI not found. Install it and make sure it's on PATH.".to_string())?;
 
     let mut client = AppServerClient::spawn(&binary)?;
     let result = client.call("account/rateLimits/read", json!({}))?;
+    parse_usage_snapshot(&result, binary)
+}
 
+/// Spawns a single `codex app-server` process and issues both the
+/// rate-limit and token-usage calls the popover's Codex tab needs, instead
+/// of two separate spawns (each with its own process start + handshake).
+/// The double spawn was adding a visible stutter to every auto-refresh.
+pub fn read_usage_and_cost() -> Result<(UsageSnapshot, CostSummary), String> {
+    let binary = find_codex_binary()
+        .ok_or_else(|| "codex CLI not found. Install it and make sure it's on PATH.".to_string())?;
+
+    let mut client = AppServerClient::spawn(&binary)?;
+
+    let usage_result = client.call("account/rateLimits/read", json!({}))?;
+    let usage = parse_usage_snapshot(&usage_result, binary.clone())?;
+
+    let cost_result = client.call("account/usage/read", json!({}))?;
+    let cost = parse_cost_summary(&cost_result)?;
+
+    Ok((usage, cost))
+}
+
+fn parse_usage_snapshot(result: &Value, binary: String) -> Result<UsageSnapshot, String> {
     let primary = result
         .get("rateLimits")
         .and_then(|r| r.get("primary"))
@@ -74,25 +102,11 @@ pub fn read_usage() -> Result<UsageSnapshot, String> {
     })
 }
 
-#[derive(Serialize)]
-pub struct CostSummary {
-    pub today_tokens: u64,
-    pub last_30_days_tokens: u64,
-}
-
-/// Reads a token-usage summary from `account/usage/read`.
-///
-/// Despite the name, this carries no dollar figures - the confirmed response
-/// shape (see `docs/app-server-protocol.md`) only has a per-day token bucket
-/// list and a lifetime summary, no per-model pricing breakdown to compute
-/// cost from.
-pub fn read_cost_summary() -> Result<CostSummary, String> {
-    let binary = find_codex_binary()
-        .ok_or_else(|| "codex CLI not found. Install it and make sure it's on PATH.".to_string())?;
-
-    let mut client = AppServerClient::spawn(&binary)?;
-    let result = client.call("account/usage/read", json!({}))?;
-
+/// Parses `account/usage/read`'s response. Despite the struct's name, this
+/// carries no dollar figures - the confirmed response shape (see
+/// `docs/app-server-protocol.md`) only has a per-day token bucket list and a
+/// lifetime summary, no per-model pricing breakdown to compute cost from.
+fn parse_cost_summary(result: &Value) -> Result<CostSummary, String> {
     let buckets = result
         .get("dailyUsageBuckets")
         .and_then(|v| v.as_array())
