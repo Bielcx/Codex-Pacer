@@ -27,6 +27,8 @@ fn get_usage(app: tauri::AppHandle) -> Result<codex::UsageSnapshot, String> {
 struct PacingResult {
     remaining_percent: f32,
     reset_at: String,
+    window_start: String,
+    safety_buffer_percent: f32,
     source: String,
     target_remaining_percent: f32,
     safe_burn_rate_per_hour: f32,
@@ -61,6 +63,8 @@ fn get_pacing(app: tauri::AppHandle) -> Result<PacingResult, String> {
     Ok(PacingResult {
         remaining_percent: snapshot.remaining_percent,
         reset_at: snapshot.reset_at,
+        window_start: window_start.to_rfc3339(),
+        safety_buffer_percent: pacing::DEFAULT_SAFETY_BUFFER_PERCENT,
         source: snapshot.source,
         target_remaining_percent: report.target_remaining_percent,
         safe_burn_rate_per_hour: report.safe_burn_rate_per_hour,
@@ -69,9 +73,32 @@ fn get_pacing(app: tauri::AppHandle) -> Result<PacingResult, String> {
     })
 }
 
+#[derive(serde::Serialize)]
+struct HistoryPoint {
+    observed_at: String,
+    remaining_percent: f32,
+}
+
+/// All stored samples, for the popover's burn-down chart. The frontend
+/// filters down to the current window client-side using the `window_start`
+/// it already got from `get_pacing`, so this stays a single flat list
+/// instead of needing its own window-lookup (which would mean spawning
+/// another `codex app-server` just to draw a chart).
+#[tauri::command]
+fn get_history(app: tauri::AppHandle) -> Result<Vec<HistoryPoint>, String> {
+    let samples = history::read_all_samples(&app)?;
+    Ok(samples
+        .into_iter()
+        .map(|s| HistoryPoint {
+            observed_at: s.observed_at,
+            remaining_percent: s.remaining_percent,
+        })
+        .collect())
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_usage, get_pacing])
+        .invoke_handler(tauri::generate_handler![get_usage, get_pacing, get_history])
         .setup(|app| {
             if let Err(e) = history::cleanup_old_samples(&app.handle(), history::DEFAULT_RETENTION_DAYS) {
                 eprintln!("failed to clean up old usage history: {e}");
