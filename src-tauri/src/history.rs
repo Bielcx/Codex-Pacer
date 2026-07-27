@@ -87,9 +87,7 @@ pub fn record_sample(app: &AppHandle, snapshot: &UsageSnapshot) -> Result<(), St
 }
 
 /// Reads every stored sample across all daily files, oldest first.
-/// Used by the pacing calculation (see the follow-up issue); not wired into
-/// the UI yet.
-#[allow(dead_code)]
+/// Used by the pacing calculation in `pacing.rs`.
 pub fn read_all_samples(app: &AppHandle) -> Result<Vec<UsageSample>, String> {
     let dir = history_dir(app)?;
     let mut dated_files: Vec<(NaiveDate, PathBuf)> = fs::read_dir(&dir)
