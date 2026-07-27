@@ -121,3 +121,57 @@ pub fn read_usage() -> Result<UsageSnapshot, String> {
         window_duration_mins,
     })
 }
+
+#[derive(Serialize)]
+pub struct CostSummary {
+    pub today_tokens: u64,
+    pub last_30_days_tokens: u64,
+}
+
+/// Reads a token-usage summary from `account/usage/read`.
+///
+/// Despite the name, this carries no dollar figures - the confirmed response
+/// shape (see `docs/app-server-protocol.md`) only has a per-day token bucket
+/// list and a lifetime summary, no per-model pricing breakdown to compute
+/// cost from.
+pub fn read_cost_summary() -> Result<CostSummary, String> {
+    let binary = find_codex_binary()
+        .ok_or_else(|| "codex CLI not found. Install it and make sure it's on PATH.".to_string())?;
+
+    let mut client = AppServerClient::spawn(&binary)?;
+    let result = client.call("account/usage/read", json!({}))?;
+
+    let buckets = result
+        .get("dailyUsageBuckets")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "unexpected response shape from account/usage/read".to_string())?;
+
+    let today = Utc::now().date_naive();
+    let window_start = today - chrono::Duration::days(29);
+
+    let mut today_tokens = 0u64;
+    let mut last_30_days_tokens = 0u64;
+
+    for bucket in buckets {
+        let Some(date) = bucket
+            .get("startDate")
+            .and_then(|v| v.as_str())
+            .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+        else {
+            continue;
+        };
+        let tokens = bucket.get("tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+
+        if date == today {
+            today_tokens = tokens;
+        }
+        if date >= window_start && date <= today {
+            last_30_days_tokens += tokens;
+        }
+    }
+
+    Ok(CostSummary {
+        today_tokens,
+        last_30_days_tokens,
+    })
+}

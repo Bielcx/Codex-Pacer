@@ -96,9 +96,19 @@ fn get_history(app: tauri::AppHandle) -> Result<Vec<HistoryPoint>, String> {
         .collect())
 }
 
+#[tauri::command]
+fn get_cost_summary() -> Result<codex::CostSummary, String> {
+    codex::read_cost_summary()
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_usage, get_pacing, get_history])
+        .invoke_handler(tauri::generate_handler![
+            get_usage,
+            get_pacing,
+            get_history,
+            get_cost_summary
+        ])
         .setup(|app| {
             if let Err(e) = history::cleanup_old_samples(&app.handle(), history::DEFAULT_RETENTION_DAYS) {
                 eprintln!("failed to clean up old usage history: {e}");

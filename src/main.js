@@ -39,6 +39,13 @@ function formatPaceDelta(remainingPercent, targetRemainingPercent) {
   return `${sign}${rounded}%`;
 }
 
+/// Compact token count, e.g. 15420 -> "15K", 218400000 -> "218M".
+function formatTokenCount(tokens) {
+  if (tokens >= 1_000_000) return `${Math.round(tokens / 1_000_000)}M`;
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K`;
+  return `${tokens}`;
+}
+
 /// Builds the inner SVG markup for a simple burn-down chart: a dashed
 /// straight target line from 100% (window start) to the safety buffer
 /// (reset), and a solid line through the actual samples recorded so far in
@@ -82,9 +89,15 @@ async function refresh() {
   const sourceEl = document.getElementById("source");
   const paceEl = document.getElementById("pace");
   const chartEl = document.getElementById("chart");
+  const tokensTodayEl = document.getElementById("tokens-today");
+  const tokens30dEl = document.getElementById("tokens-30d");
 
   try {
-    const [pacing, history] = await Promise.all([invoke("get_pacing"), invoke("get_history")]);
+    const [pacing, history, costSummary] = await Promise.all([
+      invoke("get_pacing"),
+      invoke("get_history"),
+      invoke("get_cost_summary"),
+    ]);
 
     percentEl.textContent = pacing.remaining_percent.toFixed(0);
     progressFillEl.style.width = `${Math.min(Math.max(pacing.remaining_percent, 0), 100)}%`;
@@ -103,6 +116,9 @@ async function refresh() {
       pacing.reset_at,
       pacing.safety_buffer_percent
     );
+
+    tokensTodayEl.textContent = formatTokenCount(costSummary.today_tokens);
+    tokens30dEl.textContent = formatTokenCount(costSummary.last_30_days_tokens);
   } catch (err) {
     percentEl.textContent = "!";
     progressFillEl.style.width = "0%";
@@ -110,6 +126,8 @@ async function refresh() {
     paceEl.textContent = "";
     paceEl.className = "pace";
     chartEl.innerHTML = "";
+    tokensTodayEl.textContent = "--";
+    tokens30dEl.textContent = "--";
     sourceEl.textContent = err;
   }
 }
