@@ -1,3 +1,4 @@
+mod app_server;
 mod codex;
 
 use tauri::{
