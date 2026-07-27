@@ -1,5 +1,6 @@
 mod app_server;
 mod codex;
+mod history;
 
 use tauri::{
     menu::{Menu, MenuItem},
@@ -8,14 +9,26 @@ use tauri::{
 };
 
 #[tauri::command]
-fn get_usage() -> Result<codex::UsageSnapshot, String> {
-    codex::read_usage().map_err(|e| e.to_string())
+fn get_usage(app: tauri::AppHandle) -> Result<codex::UsageSnapshot, String> {
+    let snapshot = codex::read_usage().map_err(|e| e.to_string())?;
+
+    // Recording history should never break the UI even if it fails (e.g.
+    // disk full, permissions) - log and move on.
+    if let Err(e) = history::record_sample(&app, &snapshot) {
+        eprintln!("failed to record usage sample: {e}");
+    }
+
+    Ok(snapshot)
 }
 
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![get_usage])
         .setup(|app| {
+            if let Err(e) = history::cleanup_old_samples(&app.handle(), history::DEFAULT_RETENTION_DAYS) {
+                eprintln!("failed to clean up old usage history: {e}");
+            }
+
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
 
