@@ -39,8 +39,14 @@ impl AppServerClient {
             .spawn()
             .map_err(|e| format!("failed to spawn `{binary} app-server`: {e}"))?;
 
-        let stdin = child.stdin.take().ok_or("missing stdin pipe on app-server process")?;
-        let stdout = child.stdout.take().ok_or("missing stdout pipe on app-server process")?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or("missing stdin pipe on app-server process")?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or("missing stdout pipe on app-server process")?;
 
         let mut client = AppServerClient {
             child,

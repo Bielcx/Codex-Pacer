@@ -2,6 +2,7 @@
 
 A system tray app that tells you whether to slow down — not just how much usage is left.
 
+[![CI](https://github.com/Bielcx/Codex-Pacer/actions/workflows/ci.yml/badge.svg)](https://github.com/Bielcx/Codex-Pacer/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95-d97757)](https://buymeacoffee.com/bielcx)
 

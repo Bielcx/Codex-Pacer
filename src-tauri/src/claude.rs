@@ -91,7 +91,8 @@ fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<(), Strin
     let json = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     let tmp_path = path.with_extension("json.tmp");
     fs::write(&tmp_path, json.as_bytes()).map_err(|e| format!("failed writing temp file: {e}"))?;
-    fs::rename(&tmp_path, path).map_err(|e| format!("failed to finalize {}: {e}", path.display()))?;
+    fs::rename(&tmp_path, path)
+        .map_err(|e| format!("failed to finalize {}: {e}", path.display()))?;
     Ok(())
 }
 
@@ -112,7 +113,8 @@ fn setup_under(home: &Path) -> Result<(), String> {
 
     let settings_path = home.join(".claude").join("settings.json");
     if let Some(parent) = settings_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("could not create {}: {e}", parent.display()))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("could not create {}: {e}", parent.display()))?;
     }
 
     let mut settings: serde_json::Value = match fs::read_to_string(&settings_path) {
@@ -160,8 +162,8 @@ fn unsetup_under(home: &Path) -> Result<(), String> {
     let backup_path = dir.join(BACKUP_FILE_NAME);
 
     if let Ok(text) = fs::read_to_string(&backup_path) {
-        let backup: StatusLineBackup =
-            serde_json::from_str(&text).map_err(|e| format!("corrupted Claude statusLine backup: {e}"))?;
+        let backup: StatusLineBackup = serde_json::from_str(&text)
+            .map_err(|e| format!("corrupted Claude statusLine backup: {e}"))?;
 
         let settings_path = home.join(".claude").join("settings.json");
         if let Ok(existing_text) = fs::read_to_string(&settings_path) {
@@ -290,7 +292,10 @@ mod tests {
         fn new() -> Self {
             static COUNTER: AtomicU32 = AtomicU32::new(0);
             let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let dir = std::env::temp_dir().join(format!("codex-pacer-claude-test-{n}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!(
+                "codex-pacer-claude-test-{n}-{}",
+                std::process::id()
+            ));
             fs::create_dir_all(&dir).unwrap();
             TempHome(dir)
         }
@@ -305,7 +310,11 @@ mod tests {
     fn write_state_file(home: &Path, json: serde_json::Value) {
         let dir = home.join(STATE_DIR_NAME);
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join(STATE_FILE_NAME), serde_json::to_string(&json).unwrap()).unwrap();
+        fs::write(
+            dir.join(STATE_FILE_NAME),
+            serde_json::to_string(&json).unwrap(),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -323,8 +332,10 @@ mod tests {
 
         assert!(home.0.join(STATE_DIR_NAME).join(HOOK_SCRIPT_NAME).exists());
 
-        let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(home.0.join(".claude/settings.json")).unwrap()).unwrap();
+        let settings: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(home.0.join(".claude/settings.json")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(settings["statusLine"]["type"], "command");
         assert!(settings["statusLine"]["command"]
             .as_str()
@@ -352,8 +363,10 @@ mod tests {
 
         unsetup_under(&home.0).unwrap();
 
-        let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(home.0.join(".claude/settings.json")).unwrap()).unwrap();
+        let settings: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(home.0.join(".claude/settings.json")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(settings["statusLine"]["command"], "my-old-script.sh");
     }
 
@@ -363,8 +376,10 @@ mod tests {
         setup_under(&home.0).unwrap();
         unsetup_under(&home.0).unwrap();
 
-        let settings: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(home.0.join(".claude/settings.json")).unwrap()).unwrap();
+        let settings: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(home.0.join(".claude/settings.json")).unwrap(),
+        )
+        .unwrap();
         assert!(settings.get("statusLine").is_none());
         assert!(!home.0.join(STATE_DIR_NAME).join(HOOK_SCRIPT_NAME).exists());
     }

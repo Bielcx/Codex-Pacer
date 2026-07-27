@@ -129,7 +129,10 @@ const CLAUDE_SEVEN_DAY_MINS: i64 = 7 * 24 * 60;
 /// warning - i.e. Claude Code hasn't run (or its session was closed) recently.
 const CLAUDE_STALE_THRESHOLD_MINS: i64 = 30;
 
-fn build_claude_window(window: claude::RateLimitWindow, window_duration_mins: i64) -> ClaudeWindowResult {
+fn build_claude_window(
+    window: claude::RateLimitWindow,
+    window_duration_mins: i64,
+) -> ClaudeWindowResult {
     let window_start = window.reset_at - Duration::minutes(window_duration_mins);
     let report = pacing::evaluate(
         window.remaining_percent,
@@ -165,8 +168,12 @@ fn get_claude_pacing(app: tauri::AppHandle) -> Result<ClaudePacingResult, String
         configured: snapshot.configured,
         captured_at: snapshot.captured_at.map(|t| t.to_rfc3339()),
         stale,
-        five_hour: snapshot.five_hour.map(|w| build_claude_window(w, CLAUDE_FIVE_HOUR_MINS)),
-        seven_day: snapshot.seven_day.map(|w| build_claude_window(w, CLAUDE_SEVEN_DAY_MINS)),
+        five_hour: snapshot
+            .five_hour
+            .map(|w| build_claude_window(w, CLAUDE_FIVE_HOUR_MINS)),
+        seven_day: snapshot
+            .seven_day
+            .map(|w| build_claude_window(w, CLAUDE_SEVEN_DAY_MINS)),
     })
 }
 
@@ -192,7 +199,9 @@ fn main() {
             unsetup_claude_integration
         ])
         .setup(|app| {
-            if let Err(e) = history::cleanup_old_samples(&app.handle(), history::DEFAULT_RETENTION_DAYS) {
+            if let Err(e) =
+                history::cleanup_old_samples(app.handle(), history::DEFAULT_RETENTION_DAYS)
+            {
                 eprintln!("failed to clean up old usage history: {e}");
             }
 
