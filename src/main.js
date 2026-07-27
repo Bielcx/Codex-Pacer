@@ -12,6 +12,33 @@ const VERDICT_LABELS = {
 
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
+/// Humanizes the time left until `resetAtIso`, e.g. "Resets in 3h 53m".
+/// Only includes the units that matter (no "0d" on a same-day reset).
+function formatResetCountdown(resetAtIso) {
+  const diffMs = new Date(resetAtIso).getTime() - Date.now();
+  if (diffMs <= 0) return "Resets shortly";
+
+  const totalMinutes = Math.round(diffMs / 60000);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (days > 0 || hours > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+
+  return `Resets in ${parts.join(" ")}`;
+}
+
+/// Rounded delta between actual and target remaining %, e.g. "-18%" or "+4%".
+/// `|| 0` folds Math.round's possible -0 (e.g. from -0.4) into a plain 0.
+function formatPaceDelta(remainingPercent, targetRemainingPercent) {
+  const rounded = Math.round(remainingPercent - targetRemainingPercent) || 0;
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${rounded}%`;
+}
+
 /// Builds the inner SVG markup for a simple burn-down chart: a dashed
 /// straight target line from 100% (window start) to the safety buffer
 /// (reset), and a solid line through the actual samples recorded so far in
@@ -50,20 +77,25 @@ function buildChartSvg(historyPoints, windowStartIso, resetAtIso, bufferPercent)
 
 async function refresh() {
   const percentEl = document.getElementById("percent");
+  const progressFillEl = document.getElementById("progress-fill");
   const resetEl = document.getElementById("reset");
   const sourceEl = document.getElementById("source");
-  const verdictEl = document.getElementById("verdict");
+  const paceEl = document.getElementById("pace");
   const chartEl = document.getElementById("chart");
 
   try {
     const [pacing, history] = await Promise.all([invoke("get_pacing"), invoke("get_history")]);
 
     percentEl.textContent = pacing.remaining_percent.toFixed(0);
-    resetEl.textContent = pacing.reset_at;
+    progressFillEl.style.width = `${Math.min(Math.max(pacing.remaining_percent, 0), 100)}%`;
+    resetEl.textContent = formatResetCountdown(pacing.reset_at);
     sourceEl.textContent = `codex: ${pacing.source}`;
 
-    verdictEl.textContent = VERDICT_LABELS[pacing.verdict] ?? pacing.verdict;
-    verdictEl.className = `verdict verdict-${pacing.verdict.replace(/_/g, "-")}`;
+    const verdictClass = `verdict-${pacing.verdict.replace(/_/g, "-")}`;
+    const verdictLabel = VERDICT_LABELS[pacing.verdict] ?? pacing.verdict;
+    const delta = formatPaceDelta(pacing.remaining_percent, pacing.target_remaining_percent);
+    paceEl.textContent = `${delta} vs target · ${verdictLabel}`;
+    paceEl.className = `pace ${verdictClass}`;
 
     chartEl.innerHTML = buildChartSvg(
       history,
@@ -73,7 +105,10 @@ async function refresh() {
     );
   } catch (err) {
     percentEl.textContent = "!";
-    verdictEl.textContent = "";
+    progressFillEl.style.width = "0%";
+    resetEl.textContent = "--";
+    paceEl.textContent = "";
+    paceEl.className = "pace";
     chartEl.innerHTML = "";
     sourceEl.textContent = err;
   }
