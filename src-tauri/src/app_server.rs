@@ -32,8 +32,7 @@ impl AppServerClient {
     /// Spawns `<binary> app-server` and performs the initialize/initialized
     /// handshake required before any other call.
     pub fn spawn(binary: &str) -> Result<Self, String> {
-        let mut child = Command::new(binary)
-            .arg("app-server")
+        let mut child = Self::build_command(binary)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -51,6 +50,23 @@ impl AppServerClient {
         };
         client.handshake()?;
         Ok(client)
+    }
+
+    /// npm-installed CLIs on Windows resolve to a `.cmd`/`.bat` shim, which
+    /// `CreateProcess` cannot execute directly (error 193) — those need to
+    /// run through `cmd.exe /C`. Anything else (a real `.exe`, or PATH
+    /// lookups on macOS/Linux) is launched directly.
+    fn build_command(binary: &str) -> Command {
+        let lower = binary.to_lowercase();
+        if cfg!(target_os = "windows") && (lower.ends_with(".cmd") || lower.ends_with(".bat")) {
+            let mut command = Command::new("cmd");
+            command.args(["/C", binary, "app-server"]);
+            command
+        } else {
+            let mut command = Command::new(binary);
+            command.arg("app-server");
+            command
+        }
     }
 
     fn handshake(&mut self) -> Result<(), String> {

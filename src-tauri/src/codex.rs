@@ -26,11 +26,36 @@ pub fn find_codex_binary() -> Option<String> {
     if let Ok(output) = Command::new(finder).arg("codex").output() {
         if output.status.success() {
             if let Ok(text) = String::from_utf8(output.stdout) {
-                if let Some(first_line) = text.lines().next() {
-                    let trimmed = first_line.trim();
-                    if !trimmed.is_empty() {
-                        return Some(trimmed.to_string());
+                let candidates: Vec<&str> = text
+                    .lines()
+                    .map(|l| l.trim())
+                    .filter(|l| !l.is_empty())
+                    .collect();
+
+                if cfg!(target_os = "windows") {
+                    // npm's global installer drops several shims per package
+                    // (an extension-less POSIX shell script for Git
+                    // Bash/WSL, plus `.cmd`/`.ps1` for native Windows).
+                    // `where` lists the extension-less one first because it
+                    // matches the bare name exactly, but CreateProcess can't
+                    // execute it directly (error 193). Prefer something
+                    // Windows can actually run.
+                    if let Some(exe) = candidates
+                        .iter()
+                        .find(|p| p.to_lowercase().ends_with(".exe"))
+                    {
+                        return Some(exe.to_string());
                     }
+                    if let Some(cmd) = candidates.iter().find(|p| {
+                        let lower = p.to_lowercase();
+                        lower.ends_with(".cmd") || lower.ends_with(".bat")
+                    }) {
+                        return Some(cmd.to_string());
+                    }
+                }
+
+                if let Some(first) = candidates.first() {
+                    return Some(first.to_string());
                 }
             }
         }
