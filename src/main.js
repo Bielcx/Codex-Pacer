@@ -1,4 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
+// No bundler here, so we use the window.__TAURI__ global (enabled via
+// `app.withGlobalTauri` in tauri.conf.json) instead of importing
+// "@tauri-apps/api/core" as a bare module specifier, which the browser
+// can't resolve without a bundler/import map.
+const { invoke } = window.__TAURI__.core;
 
 async function loadUsage() {
   const percentEl = document.getElementById("percent");
