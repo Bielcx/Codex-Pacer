@@ -145,7 +145,7 @@ function renderClaudeWindowCard(label, rateLimitWindow) {
       <p class="label">${label}</p>
       <p class="remaining">${rateLimitWindow.remaining_percent.toFixed(0)}%</p>
       <div class="progress-track">
-        <div class="progress-fill" style="width: ${width}%"></div>
+        <div class="progress-fill" style="width: ${width}%; background: var(--claude-accent);"></div>
       </div>
       <p class="reset">${formatResetCountdown(rateLimitWindow.reset_at)}</p>
       <p class="pace ${verdictClass}">${delta} vs target · ${verdictLabel}</p>

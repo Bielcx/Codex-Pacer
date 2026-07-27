@@ -11,8 +11,30 @@
       <h1>Codex Pacer</h1>
 
       <div class="tabs" role="tablist">
-        <button class="tab-btn" data-tab="codex" aria-selected="true">Codex</button>
-        <button class="tab-btn" data-tab="claude" aria-selected="false">Claude</button>
+        <button class="tab-btn" data-tab="codex" aria-selected="true">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="16" rx="3" stroke="currentColor" stroke-width="1.8" />
+            <path
+              d="M7 9l3 3-3 3"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <line x1="12" y1="15" x2="16" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+          <span>Codex</span>
+        </button>
+        <button class="tab-btn" data-tab="claude" aria-selected="false">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <g stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <line x1="12" y1="3" x2="12" y2="21" />
+              <line x1="4.5" y1="7.5" x2="19.5" y2="16.5" />
+              <line x1="19.5" y1="7.5" x2="4.5" y2="16.5" />
+            </g>
+          </svg>
+          <span>Claude</span>
+        </button>
       </div>
 
       <div id="tab-codex" class="tab-panel">
