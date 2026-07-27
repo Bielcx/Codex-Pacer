@@ -1,65 +1,88 @@
 # Codex Pacer
 
-App de bandeja (system tray) para acompanhar e dar ritmo ao uso do [Codex CLI](https://github.com/openai/codex). Foco principal em **Windows**, com **Linux** como plataforma secundária (mesma base de código via Tauri).
+A system tray app that tells you whether to slow down — not just how much of your [Codex CLI](https://github.com/openai/codex) usage is left.
 
-Inspirado no [codex-limits](https://github.com/thrr87/codex-limits) (macOS/SwiftUI), reescrito para rodar fora do ecossistema Apple.
+Most usage trackers show raw numbers: session %, weekly %, credits. Codex Pacer compares your actual usage against a straight-line target trajectory to the next reset and gives you a plain-language verdict: **Slow down**, **On track**, or **Room to use more**. Built primarily for **Windows**, with **Linux** as a secondary target (same codebase, via Tauri).
 
-> Codex Pacer é um projeto independente, não afiliado à OpenAI.
+Inspired by [codex-limits](https://github.com/thrr87/codex-limits) (macOS/SwiftUI), rewritten to run outside the Apple ecosystem.
 
-## Stack
+> Codex Pacer is an independent, unofficial project. Not affiliated with or endorsed by OpenAI.
 
-- [Tauri v2](https://tauri.app) (Rust no backend, WebView nativo do SO)
-- Frontend simples em HTML/JS/CSS, sem framework (app pequeno o suficiente pra não precisar)
+## Why this instead of a usage dashboard?
 
-## Status atual
+There are excellent multi-provider dashboards out there (e.g. [CodexBar](https://github.com/steipete/CodexBar)) if you want every AI tool's usage in one place. Codex Pacer does one thing instead: it tells you, right now, whether your pace of usage will get you to the reset without running out — or whether you're being too conservative and could use more.
 
-Esqueleto inicial do projeto. Já existe:
+It's also deliberately narrow in scope: only Codex, no browser cookies, no OAuth, no Keychain/credential-store access. It talks to the `codex` CLI you already have installed and logged in, the same way the official Codex clients do.
 
-- Estrutura do projeto Tauri (`src-tauri` + `src`)
-- Tray icon com menu (Quit) e clique pra abrir/fechar a janela popover
-- Detecção do binário `codex` no PATH (`where`/`which`), com fallback de caminhos conhecidos
-- Comando `get_usage` exposto ao frontend, hoje retornando dado **stub** (fixo)
+## What it does
 
-Ainda **não implementado**:
+- Reads real usage from the Codex CLI's `app-server` JSON-RPC interface (see [`docs/app-server-protocol.md`](docs/app-server-protocol.md)).
+- Compares actual usage against a target trajectory (100% at window start, down to a safety buffer at reset) and shows a burn-down chart plus the verdict.
+- Records local usage samples (daily JSON files, 90-day retention) to track actual pace over time.
+- Auto-refreshes on window focus, every 10 minutes, and on demand.
+- Runs as a native tray app with no third-party runtime dependencies bundled into the app itself.
 
-- Integração real com a interface app-server do Codex CLI (protocolo precisa ser confirmado e implementado em `src-tauri/src/codex.rs`)
-- Histórico local (samples diários, JSON versionado)
-- Cálculo de ritmo/burn-down comparado com a meta
-- Ícones do app (ver seção abaixo)
+## Privacy
 
-## Requisitos de desenvolvimento
+- No credentials are read, stored, or transmitted by Codex Pacer. It starts the user-managed `codex` CLI and talks to its local `app-server` interface — the same credentials the CLI itself already has.
+- Usage samples are stored locally as JSON files under the OS app-data directory (`%LOCALAPPDATA%\com.bielcx.codexpacer` on Windows, `~/.local/share/com.bielcx.codexpacer` on Linux).
+- No telemetry, no analytics, no network calls other than what the Codex CLI itself makes.
 
-- [Rust](https://www.rust-lang.org/tools/install) (toolchain estável) + Cargo
+## Install
+
+Prebuilt Windows and Linux builds are attached to [GitHub Releases](../../releases) (installer `.exe`/`.msi` for Windows, `.deb`/`.AppImage` for Linux).
+
+Requires the [Codex CLI](https://github.com/openai/codex) installed and logged in (`npm i -g @openai/codex`, then `codex login`).
+
+## Development
+
+### Requirements
+
+- [Rust](https://www.rust-lang.org/tools/install) (stable toolchain) + Cargo
 - [Node.js](https://nodejs.org/) 18+
-- Windows: [Build Tools for Visual Studio](https://tauri.app/start/prerequisites/) (C++ workload) e WebView2 (já vem no Windows 11; no Windows 10 pode precisar instalar)
-- Linux: dependências de sistema listadas nos [pré-requisitos do Tauri](https://tauri.app/start/prerequisites/#linux) (webkit2gtk, libappindicator, etc.)
-- Codex CLI instalado e no PATH (`npm i -g @openai/codex` ou instalador oficial)
+- Windows: [Build Tools for Visual Studio](https://tauri.app/start/prerequisites/) (C++ workload) and WebView2 (bundled with Windows 11; may need installing on Windows 10)
+- Linux: system dependencies listed in [Tauri's prerequisites](https://tauri.app/start/prerequisites/#linux) (webkit2gtk, libappindicator, etc.)
 
-## Rodando em desenvolvimento
+### Running in dev mode
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Gerando os ícones
-
-O projeto ainda não tem os ícones reais. Antes do primeiro build, gere a partir de uma imagem-fonte (PNG quadrado, de preferência 1024x1024):
+### Tests
 
 ```bash
-npx tauri icon caminho/para/logo.png
+cd src-tauri
+cargo test
 ```
 
-Isso cria a pasta `src-tauri/icons` com os formatos que o `tauri.conf.json` já espera.
-
-## Build
+### Build
 
 ```bash
 npm run build
 ```
 
-Gera instaladores Windows (NSIS/MSI) e, quando rodado em Linux, pacotes `.deb`/AppImage.
+Produces Windows installers (NSIS/MSI) or, when run on Linux, `.deb`/AppImage packages, in `src-tauri/target/release/bundle/`.
 
-## Licença
+### Regenerating icons
+
+Icons are committed under `src-tauri/icons/`. To regenerate them from a new source image (square PNG, ideally 1024x1024):
+
+```bash
+npx tauri icon path/to/logo.png
+```
+
+## Roadmap
+
+- [x] Read real usage from the Codex CLI app-server
+- [x] Local usage history
+- [x] Pacing verdict + burn-down chart
+- [x] Popover UI + auto-refresh
+- [x] Packaging + release pipeline
+- [ ] Token/cost tracking (via `account/usage/read`)
+- [ ] Configurable safety buffer in a settings UI
+
+## License
 
 MIT.

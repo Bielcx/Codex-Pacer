@@ -28,6 +28,9 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi", "deb", "appimage"],
+    "publisher": "Gabriel Cavalcanti",
+    "copyright": "Copyright © 2026 Gabriel Cavalcanti",
+    "shortDescription": "Track and pace your Codex CLI usage from the system tray",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
