@@ -129,10 +129,13 @@ fn recent_burn_rate(history: &[UsageSample], window_start: DateTime<Utc>) -> Opt
 mod tests {
     use super::*;
     use crate::history::UsageSample;
-    use chrono::TimeZone;
+    use chrono::{Duration, TimeZone};
 
-    fn at(hour: u32) -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 7, 27, hour, 0, 0).unwrap()
+    /// `hour` counts hours since 2026-07-27T00:00:00Z rather than a literal
+    /// hour-of-day, so `at(24)` etc. stay valid instead of overflowing into
+    /// a nonexistent "24:00" on the same day.
+    fn at(hour: i64) -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 7, 27, 0, 0, 0).unwrap() + Duration::hours(hour)
     }
 
     // 24h window, buffer 3%, tolerance 5%, evaluated at the halfway point
