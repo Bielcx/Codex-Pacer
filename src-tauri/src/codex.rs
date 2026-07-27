@@ -9,6 +9,11 @@ pub struct UsageSnapshot {
     pub remaining_percent: f32,
     pub reset_at: String,
     pub source: String,
+    /// Length of the current rate-limit window, in minutes. Needed to work
+    /// out when the window started (`reset_at - window_duration_mins`),
+    /// which the pacing calculation uses as the start of its target
+    /// trajectory.
+    pub window_duration_mins: i64,
 }
 
 /// Locates the `codex` CLI executable.
@@ -104,9 +109,15 @@ pub fn read_usage() -> Result<UsageSnapshot, String> {
         .map(|dt| dt.to_rfc3339())
         .unwrap_or_else(|| "unknown".to_string());
 
+    let window_duration_mins = primary
+        .get("windowDurationMins")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+
     Ok(UsageSnapshot {
         remaining_percent: (100.0 - used_percent) as f32,
         reset_at,
         source: binary,
+        window_duration_mins,
     })
 }
