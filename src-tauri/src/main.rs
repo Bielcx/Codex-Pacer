@@ -1,4 +1,6 @@
 mod app_server;
+mod claude;
+mod cli_finder;
 mod codex;
 mod history;
 mod pacing;
@@ -101,13 +103,93 @@ fn get_cost_summary() -> Result<codex::CostSummary, String> {
     codex::read_cost_summary()
 }
 
+#[derive(serde::Serialize)]
+struct ClaudeWindowResult {
+    remaining_percent: f32,
+    reset_at: String,
+    window_start: String,
+    target_remaining_percent: f32,
+    safe_burn_rate_per_hour: f32,
+    verdict: pacing::Verdict,
+}
+
+#[derive(serde::Serialize)]
+struct ClaudePacingResult {
+    installed: bool,
+    configured: bool,
+    captured_at: Option<String>,
+    stale: bool,
+    five_hour: Option<ClaudeWindowResult>,
+    seven_day: Option<ClaudeWindowResult>,
+}
+
+const CLAUDE_FIVE_HOUR_MINS: i64 = 5 * 60;
+const CLAUDE_SEVEN_DAY_MINS: i64 = 7 * 24 * 60;
+/// How long without a fresh statusLine invocation before showing a "stale"
+/// warning - i.e. Claude Code hasn't run (or its session was closed) recently.
+const CLAUDE_STALE_THRESHOLD_MINS: i64 = 30;
+
+fn build_claude_window(window: claude::RateLimitWindow, window_duration_mins: i64) -> ClaudeWindowResult {
+    let window_start = window.reset_at - Duration::minutes(window_duration_mins);
+    let report = pacing::evaluate(
+        window.remaining_percent,
+        window_start,
+        window.reset_at,
+        Utc::now(),
+        pacing::DEFAULT_SAFETY_BUFFER_PERCENT,
+        pacing::DEFAULT_TOLERANCE_PERCENT,
+        &[],
+    );
+
+    ClaudeWindowResult {
+        remaining_percent: window.remaining_percent,
+        reset_at: window.reset_at.to_rfc3339(),
+        window_start: window_start.to_rfc3339(),
+        target_remaining_percent: report.target_remaining_percent,
+        safe_burn_rate_per_hour: report.safe_burn_rate_per_hour,
+        verdict: report.verdict,
+    }
+}
+
+#[tauri::command]
+fn get_claude_pacing(app: tauri::AppHandle) -> Result<ClaudePacingResult, String> {
+    let snapshot = claude::read_status(&app)?;
+
+    let stale = snapshot
+        .captured_at
+        .map(|t| Utc::now() - t > Duration::minutes(CLAUDE_STALE_THRESHOLD_MINS))
+        .unwrap_or(false);
+
+    Ok(ClaudePacingResult {
+        installed: snapshot.installed,
+        configured: snapshot.configured,
+        captured_at: snapshot.captured_at.map(|t| t.to_rfc3339()),
+        stale,
+        five_hour: snapshot.five_hour.map(|w| build_claude_window(w, CLAUDE_FIVE_HOUR_MINS)),
+        seven_day: snapshot.seven_day.map(|w| build_claude_window(w, CLAUDE_SEVEN_DAY_MINS)),
+    })
+}
+
+#[tauri::command]
+fn setup_claude_integration(app: tauri::AppHandle) -> Result<(), String> {
+    claude::setup(&app)
+}
+
+#[tauri::command]
+fn unsetup_claude_integration(app: tauri::AppHandle) -> Result<(), String> {
+    claude::unsetup(&app)
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             get_usage,
             get_pacing,
             get_history,
-            get_cost_summary
+            get_cost_summary,
+            get_claude_pacing,
+            setup_claude_integration,
+            unsetup_claude_integration
         ])
         .setup(|app| {
             if let Err(e) = history::cleanup_old_samples(&app.handle(), history::DEFAULT_RETENTION_DAYS) {

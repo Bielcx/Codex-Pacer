@@ -82,7 +82,7 @@ function buildChartSvg(historyPoints, windowStartIso, resetAtIso, bufferPercent)
   `;
 }
 
-async function refresh() {
+async function refreshCodex() {
   const percentEl = document.getElementById("percent");
   const progressFillEl = document.getElementById("progress-fill");
   const resetEl = document.getElementById("reset");
@@ -132,8 +132,112 @@ async function refresh() {
   }
 }
 
-document.getElementById("refresh").addEventListener("click", refresh);
-window.addEventListener("DOMContentLoaded", refresh);
+/// Renders one rate-limit window (five_hour or seven_day) as a mini version
+/// of the Codex tab's remaining/pace cards, reusing the same CSS classes.
+function renderClaudeWindowCard(label, rateLimitWindow) {
+  const verdictClass = `verdict-${rateLimitWindow.verdict.replace(/_/g, "-")}`;
+  const verdictLabel = VERDICT_LABELS[rateLimitWindow.verdict] ?? rateLimitWindow.verdict;
+  const delta = formatPaceDelta(rateLimitWindow.remaining_percent, rateLimitWindow.target_remaining_percent);
+  const width = Math.min(Math.max(rateLimitWindow.remaining_percent, 0), 100);
+
+  return `
+    <section class="card">
+      <p class="label">${label}</p>
+      <p class="remaining">${rateLimitWindow.remaining_percent.toFixed(0)}%</p>
+      <div class="progress-track">
+        <div class="progress-fill" style="width: ${width}%"></div>
+      </div>
+      <p class="reset">${formatResetCountdown(rateLimitWindow.reset_at)}</p>
+      <p class="pace ${verdictClass}">${delta} vs target · ${verdictLabel}</p>
+    </section>
+  `;
+}
+
+function renderClaudeTab(result) {
+  const container = document.getElementById("claude-content");
+
+  if (!result.installed) {
+    container.innerHTML = `<p class="source">Claude Code CLI not found on PATH. Install it to enable tracking.</p>`;
+    return;
+  }
+
+  if (!result.configured) {
+    container.innerHTML = `
+      <p class="source">
+        Track Claude Code's session and weekly limits via its statusLine hook.
+        No OAuth, no cookies, no Keychain access - just a local JSON file.
+      </p>
+      <button id="claude-setup">Enable tracking</button>
+    `;
+    document.getElementById("claude-setup").addEventListener("click", async () => {
+      await invoke("setup_claude_integration");
+      refreshClaude();
+    });
+    return;
+  }
+
+  const parts = [];
+  if (result.stale) {
+    parts.push(`<p class="source claude-stale">Stale - Claude Code hasn't run recently.</p>`);
+  }
+
+  if (!result.captured_at) {
+    parts.push(`<p class="source">Waiting for Claude Code to run. Open a session and send a message.</p>`);
+  } else if (!result.five_hour && !result.seven_day) {
+    parts.push(`
+      <p class="source">
+        No rate-limit data in the last status update - you may be on API-key/free-tier
+        billing (no session or weekly limits), or haven't sent a message yet.
+      </p>
+    `);
+  } else {
+    if (result.five_hour) parts.push(renderClaudeWindowCard("Session (5h)", result.five_hour));
+    if (result.seven_day) parts.push(renderClaudeWindowCard("Weekly (7d)", result.seven_day));
+  }
+
+  parts.push(`<button id="claude-unsetup" class="claude-unsetup">Disable tracking</button>`);
+  container.innerHTML = parts.join("");
+  document.getElementById("claude-unsetup").addEventListener("click", async () => {
+    await invoke("unsetup_claude_integration");
+    refreshClaude();
+  });
+}
+
+async function refreshClaude() {
+  try {
+    const result = await invoke("get_claude_pacing");
+    renderClaudeTab(result);
+  } catch (err) {
+    document.getElementById("claude-content").innerHTML = `<p class="source">${err}</p>`;
+  }
+}
+
+function refreshAll() {
+  refreshCodex();
+  refreshClaude();
+}
+
+function initTabs() {
+  const buttons = document.querySelectorAll(".tab-btn");
+  const panels = document.querySelectorAll(".tab-panel");
+
+  const activate = (tab) => {
+    buttons.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+    panels.forEach((p) => {
+      p.hidden = p.id !== `tab-${tab}`;
+    });
+    localStorage.setItem("activeTab", tab);
+  };
+
+  buttons.forEach((b) => b.addEventListener("click", () => activate(b.dataset.tab)));
+  activate(localStorage.getItem("activeTab") || "codex");
+}
+
+document.getElementById("refresh").addEventListener("click", refreshAll);
+window.addEventListener("DOMContentLoaded", () => {
+  initTabs();
+  refreshAll();
+});
 
 // The popover window is shown/hidden rather than reloaded, so it never
 // fires DOMContentLoaded again after the first launch. Refresh whenever the
@@ -143,5 +247,5 @@ window.addEventListener("DOMContentLoaded", refresh);
 // doubles as the practical stand-in for that trigger: worst case, the
 // numbers are up to 10 minutes stale right after waking, which then
 // self-corrects on the next tick.
-window.addEventListener("focus", refresh);
-setInterval(refresh, REFRESH_INTERVAL_MS);
+window.addEventListener("focus", refreshAll);
+setInterval(refreshAll, REFRESH_INTERVAL_MS);

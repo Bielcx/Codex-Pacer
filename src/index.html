@@ -10,27 +10,39 @@
     <main>
       <h1>Codex Pacer</h1>
 
-      <section class="card">
-        <p class="remaining"><span id="percent">--</span>%</p>
-        <p class="label">restante</p>
-        <div class="progress-track">
-          <div class="progress-fill" id="progress-fill"></div>
-        </div>
-        <p class="reset" id="reset">--</p>
-      </section>
+      <div class="tabs" role="tablist">
+        <button class="tab-btn" data-tab="codex" aria-selected="true">Codex</button>
+        <button class="tab-btn" data-tab="claude" aria-selected="false">Claude</button>
+      </div>
 
-      <section class="card">
-        <p class="pace" id="pace">--</p>
-      </section>
+      <div id="tab-codex" class="tab-panel">
+        <section class="card">
+          <p class="remaining"><span id="percent">--</span>%</p>
+          <p class="label">restante</p>
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <p class="reset" id="reset">--</p>
+        </section>
 
-      <svg id="chart" class="chart" viewBox="0 0 300 100" preserveAspectRatio="none"></svg>
+        <section class="card">
+          <p class="pace" id="pace">--</p>
+        </section>
 
-      <section class="card usage-card">
-        <p class="usage-line">Today: <span id="tokens-today">--</span> tokens</p>
-        <p class="usage-line">Last 30 days: <span id="tokens-30d">--</span> tokens</p>
-      </section>
+        <svg id="chart" class="chart" viewBox="0 0 300 100" preserveAspectRatio="none"></svg>
 
-      <p class="source" id="source"></p>
+        <section class="card usage-card">
+          <p class="usage-line">Today: <span id="tokens-today">--</span> tokens</p>
+          <p class="usage-line">Last 30 days: <span id="tokens-30d">--</span> tokens</p>
+        </section>
+
+        <p class="source" id="source"></p>
+      </div>
+
+      <div id="tab-claude" class="tab-panel" hidden>
+        <div id="claude-content"></div>
+      </div>
+
       <button id="refresh">Atualizar</button>
     </main>
     <script type="module" src="main.js"></script>

@@ -2,7 +2,6 @@ use crate::app_server::AppServerClient;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::json;
-use std::process::Command;
 
 #[derive(Serialize)]
 pub struct UsageSnapshot {
@@ -22,50 +21,6 @@ pub struct UsageSnapshot {
 /// the binary on PATH on every OS, so PATH lookup is tried first. A short
 /// list of well-known fallback locations covers older/manual installs.
 pub fn find_codex_binary() -> Option<String> {
-    let finder = if cfg!(target_os = "windows") {
-        "where"
-    } else {
-        "which"
-    };
-
-    if let Ok(output) = Command::new(finder).arg("codex").output() {
-        if output.status.success() {
-            if let Ok(text) = String::from_utf8(output.stdout) {
-                let candidates: Vec<&str> = text
-                    .lines()
-                    .map(|l| l.trim())
-                    .filter(|l| !l.is_empty())
-                    .collect();
-
-                if cfg!(target_os = "windows") {
-                    // npm's global installer drops several shims per package
-                    // (an extension-less POSIX shell script for Git
-                    // Bash/WSL, plus `.cmd`/`.ps1` for native Windows).
-                    // `where` lists the extension-less one first because it
-                    // matches the bare name exactly, but CreateProcess can't
-                    // execute it directly (error 193). Prefer something
-                    // Windows can actually run.
-                    if let Some(exe) = candidates
-                        .iter()
-                        .find(|p| p.to_lowercase().ends_with(".exe"))
-                    {
-                        return Some(exe.to_string());
-                    }
-                    if let Some(cmd) = candidates.iter().find(|p| {
-                        let lower = p.to_lowercase();
-                        lower.ends_with(".cmd") || lower.ends_with(".bat")
-                    }) {
-                        return Some(cmd.to_string());
-                    }
-                }
-
-                if let Some(first) = candidates.first() {
-                    return Some(first.to_string());
-                }
-            }
-        }
-    }
-
     let fallback_paths: Vec<&str> = if cfg!(target_os = "windows") {
         vec![]
     } else if cfg!(target_os = "macos") {
@@ -74,10 +29,7 @@ pub fn find_codex_binary() -> Option<String> {
         vec!["/usr/local/bin/codex", "/usr/bin/codex"]
     };
 
-    fallback_paths
-        .into_iter()
-        .find(|p| std::path::Path::new(p).exists())
-        .map(|s| s.to_string())
+    crate::cli_finder::find_cli_binary("codex", &fallback_paths)
 }
 
 /// Reads a usage snapshot from the codex CLI app-server.
