@@ -204,7 +204,7 @@ fn main() {
         // launch now just focuses the existing window instead.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
-                position_near_tray(app, &window);
+                position_near_tray(&window);
                 let _ = window.show();
                 let _ = window.set_focus();
             }
@@ -270,7 +270,7 @@ fn main() {
                             if is_visible {
                                 let _ = window.hide();
                             } else {
-                                position_near_tray(app, &window);
+                                position_near_tray(&window);
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
@@ -291,31 +291,28 @@ fn main() {
         .expect("error while running Codex Pacer");
 }
 
-/// Anchors the popover just above the tray icon (Windows taskbar convention)
-/// instead of wherever the window last happened to be, so it reads as
-/// "attached to the tray" rather than a stray floating window. Falls back to
+/// Anchors the popover to the monitor's bottom-right corner, where the
+/// Windows system tray actually lives, instead of wherever the window last
+/// happened to be. A fixed corner reads as "attached to the tray" far more
+/// reliably than centering on the click position, which drifts around
+/// depending on exactly where on the icon you clicked. Falls back to
 /// leaving the window wherever it already is if we can't resolve a monitor.
-fn position_near_tray(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
+fn position_near_tray(window: &tauri::WebviewWindow) {
     let Some(monitor) = window.current_monitor().ok().flatten() else {
         return;
     };
     let Ok(window_size) = window.outer_size() else {
         return;
     };
-    let Some(cursor_pos) = app.cursor_position().ok() else {
-        return;
-    };
 
     let monitor_pos = monitor.position();
     let monitor_size = monitor.size();
 
-    let mut x = cursor_pos.x as i32 - window_size.width as i32 / 2;
-    let mut y = monitor_pos.y + monitor_size.height as i32 - window_size.height as i32 - 48;
+    const MARGIN_RIGHT: i32 = 8;
+    const MARGIN_BOTTOM: i32 = 48; // clears a default-height taskbar
 
-    let min_x = monitor_pos.x;
-    let max_x = (monitor_pos.x + monitor_size.width as i32 - window_size.width as i32).max(min_x);
-    x = x.clamp(min_x, max_x);
-    y = y.max(monitor_pos.y);
+    let x = monitor_pos.x + monitor_size.width as i32 - window_size.width as i32 - MARGIN_RIGHT;
+    let y = monitor_pos.y + monitor_size.height as i32 - window_size.height as i32 - MARGIN_BOTTOM;
 
     let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
 }

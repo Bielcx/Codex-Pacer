@@ -13,7 +13,7 @@
         "label": "main",
         "title": "Codex Pacer",
         "width": 340,
-        "height": 560,
+        "height": 600,
         "resizable": false,
         "visible": false,
         "decorations": false,
